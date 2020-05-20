@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Get Title</title>
+    <script src="vue.min.js"></script>
+    <style>
+        li {
+            font-size: 12px;
+            float: left;
+            margin-right: 30px;
+            margin-bottom: 5px;
+        }
+        li div {
+            width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        a {
+            color: blue;
+        }
+        a.visited {
+            color: gray;
+        }
+        body, html {
+            font-size: 14px;
+            margin: 0;
+            height: 100%;
+        }
+        @keyframes dots {
+            0% {
+                box-shadow: none;
+            }
+            20% {
+                box-shadow: 3px 0 0;
+            }
+            50% {
+                box-shadow: 3px 0 0, 7px 0 0
+            }
+            80% {
+                box-shadow: 3px 0 0, 7px 0 0, 11px 0 0;
+            }
+        }
+        button {
+            padding: 5px 20px;
+        }
+        .active span {
+            width: 2px;
+            height: 2px;
+            display: inline-block;
+            animation: dots 3s step-start infinite;
+        }
+        input {
+            width: 500px;
+            border: 1px solid #eee;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        span {
+            font-size: 12px;
+            margin: 0 5px;
+        }
+        .history {
+            display: inline-block;
+            width: 25px;
+            height: 25px;
+            line-height: 25px;
+            text-align: center;
+            background: #eee;
+            color: #666;
+            border-radius: 50%;
+            cursor: pointer;
+            user-select: none;
+        }
+        .history-container {
+            position: fixed;
+            height: 100%;
+            width: 100%;
+            z-index: 2;
+            left: 0;
+            top: 0;
+            overflow: hidden;
+        }
+        .history-bg {
+            width: 100%;
+            height: 100%;
+        }
+        .history-list {
+            position: absolute;
+            top: 0;
+            right: 0;
+            height: 100%;
+            overflow: auto;
+            background: #eee;
+        }
+        .history-list ul {
+            margin: 0;
+            padding: 10px;
+        }
+        .history-list li {
+            list-style: none;
+            cursor: pointer;
+            float: none;
+            margin: 3px 0;
+        }
+        .history-list li:hover {
+            color: #EE5757;
+        }
+        .slide-enter-active {
+            transition: all 0.3s ease;
+        }
+        .slide-leave-active {
+            transition: all .3s ease;
+        }
+        .slide-enter, .slide-leave-to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        #app {
+            padding: 5px;
+        }
+        .del {
+            display: inline-block;
+            float: right;
+            color: #EE5757;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div>
+            <span>请求超时</span><span><input type="text" v-model.number="formData.timeout" style="width:50px;"></span>
+            <span>子线程数</span><span><input type="text" v-model.number="formData.number" style="width:50px;"></span>
+            <span>域名</span><span><input type="text" v-model="formData.domain"></span>
+            <span class="history" @click="showHistory">H</span>
+            <button @click="rand" :disabled="disabled">随机域名1000条</button>
+            <button @click="send" :disabled="disabled" :class="{active:disabled}">{{!disabled?'start':'geting'}}<span></span></button>
+            <button @click="stop" v-if="disabled">stop<span></span></button>
+            <span v-if="time">cost: {{times}} | received: {{count}} | avg: {{avg}}</span>
+        </div>
+        <ol>
+            <li v-for="(k,i) in list" :key="i">
+                <div>
+                    <a @click="setVisited(k)" rel="noopener" :class="{visited:k.visited}" :href="k.host" target="_blank" :title="k.title">{{k.title}}</a>
+                </div>
+            </li>
+        </ol>
+            <div class="history-container" v-if="m_show_history">
+                <div class="history-bg" @click="close"></div>
+                <transition name="slide" @after-leave="leave">
+                    <div class="history-list" v-if="m_show_list">
+                        <ul>
+                            <li v-for="(k,i) in historyList" :key="i"><span @click="setDomain(k)">{{i+1}}. {{k}}</span><span @click="del(k,i)" class="del">删除</span></li>
+                        </ul>
+                    </div>
+                </transition>
+            </div>
+    </div>
+    <script>
+        let app = new Vue({
+            el: '#app',
+            data: {
+                disabled: false,
+                list: [],
+                time: 0,
+                tid: 0,
+                historyList: [],
+                m_show_history: 0,
+                m_show_list: 0,
+                count: 0,
+                formData: {
+                    domain: 'www.xxx[0-999].com',
+                    number: 20,
+                    timeout: 3000
+                }
+            },
+            watch: {
+                'formData.number'(v) {
+                    if(typeof v === 'string') {
+                        v = Number(v.replace(/[^\d]/g, ''));
+                        this.formData.number = v;
+                    }
+                    if(v > 20) {
+                        this.formData.number = 20;
+                    } else if(v < 1) {
+                        this.formData.number = 1;
+                    }
+                },
+                'formData.timeout'(v) {
+                    if(typeof v === 'string') {
+                        v = Number(v.replace(/[^\d]/g, ''));
+                        this.formData.timeout = v;
+                    }
+                    if(v < 1000) {
+                        this.formData.timeout = 1000;
+                    }
+                }
+            },
+            computed: {
+                avg() {
+                    return (this.time / this.count).toFixed(2) + 's';
+                },
+                times() {
+                    return formatTime(this.time);
+                }
+            },
+            created() {
+                this.getHistory();
+            },
+            methods: {
+                del(k, i) {
+                    this.historyList.splice(i, 1);
+                    delHistory(k);
+                },
+                setDomain(k) {
+                    this.formData.domain = k;
+                    this.close();
+                },
+                close() {
+                    this.m_show_list = 0;
+                },
+                leave() {
+                    this.m_show_history = 0;
+                },
+                getHistory() {
+                    let m = localStorage.getItem('history');
+                    if(m) {
+                        m = JSON.parse(m);
+                        m.sort((a, b) => {
+                            return a.localeCompare(b);
+                        });
+                        this.historyList = m;
+                    }
+                },
+                showHistory() {
+                    this.getHistory();
+                    this.m_show_history = 1;
+                    this.$nextTick(() => {
+                        this.m_show_list = 1;
+                    })
+                },
+                setVisited(k) {
+                    this.$set(k, 'visited', true);
+                },
+                stop() {
+                    clearInterval(this.tid);
+                    send({stop: 1});
+                },
+                rand() {
+                    this.list = [];
+                    this.disabled = true;
+                    this.time = 0;
+                    this.count = 0;
+                    clearInterval(this.tid);
+                    this.tid = setInterval(() => {
+                        this.time++;
+                    }, 1000);
+                    send({rand: 1, timeout: this.formData.timeout, number: this.formData.number});
+                },
+                send() {
+                    if(this.historyList.indexOf(this.formData.domain) > -1) {
+                        if(!confirm('历史记录中有记录，确定要重新查找？')) {
+                            return;
+                        }
+                    }
+                    this.list = [];
+                    this.disabled = true;
+                    this.time = 0;
+                    this.count = 0;
+                    clearInterval(this.tid);
+                    this.tid = setInterval(() => {
+                        this.time++;
+                    }, 1000);
+                    send(this.formData);
+                    saveHistory(this.formData.domain);
+                }
+            }
+        });
+        let ws;
+
+        function delHistory(url) {
+            let m = localStorage.getItem('history');
+            if(m) {
+                m = JSON.parse(m);
+                let n = m.indexOf(url);
+                if(n > -1) {
+                    m.splice(n, 1);
+                    localStorage.setItem('history', JSON.stringify(m));
+                }
+            }
+        }
+
+        function saveHistory(url) {
+            let m = localStorage.getItem('history');
+            if(m) {
+                m = JSON.parse(m);
+                if(m.indexOf(url) === -1) {
+                    m.push(url);
+                    localStorage.setItem('history', JSON.stringify(m));
+                }
+            } else {
+                localStorage.setItem('history', JSON.stringify([url]));
+            }
+        }
+
+        function connect() {
+            ws = new WebSocket('ws://127.0.0.1:3001');
+            ws.onopen = function() {
+                app.disabled = false;
+                console.log('connected');
+            };
+            ws.onmessage = function(data) {
+                let ob = JSON.parse(data.data);
+                app.count++;
+                ob.isHad && ob.title && app.list.push(ob);
+                if(ob.end) {
+                    app.disabled = false;
+                    clearInterval(app.tid);
+                }
+            };
+            ws.onclose = function() {
+                app.disabled = true;
+                setTimeout(function() {
+                    connect();
+                }, 5000);
+            };
+        }
+        connect();
+
+        function formatTime(time) {
+            let h = time / 3600 | 0;
+            let m = (time - h * 3600) / 60 | 0;
+            let s = time - h * 3600 - m * 60;
+            let str = '';
+            if(h) {
+                str += h + 'h';
+            }
+            if(h || m) {
+                str += m + 'm';
+            }
+            return str += s + 's';
+        }
+
+        function send(obj) {
+            ws.send(JSON.stringify(obj));
+        }
+    </script>
+</body>
+</html>
