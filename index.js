@@ -197,6 +197,8 @@ async function createChildProess(connection) {
                     kill();
                 }
             }
+        } else {
+            kill();
         }
     });
     function kill() {
