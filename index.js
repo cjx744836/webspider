@@ -24,7 +24,7 @@ const server = ws.createServer(connection => {
         connection.hadErr = 0;
         timeout = data.timeout;
         M = data.number;
-        domain = genDomain(data.rule, data.shuffix);
+        genDomain(data.rule, data.shuffix);
         trigger(connection);
     });
     connection.on('connect', function(code) {
@@ -124,15 +124,15 @@ function genDomainList(g) {
 }
 
 function randCharNumber() {
-    return CHARNUM[Math.random() * a.length | 0];
+    return CHARNUM[Math.random() * CHARNUM.length | 0];
 }
 
 function randChar() {
-    return CHAR[Math.random() * a.length | 0];
+    return CHAR[Math.random() * CHAR.length | 0];
 }
 
 function randShuffix() {
-    return SF[Math.random() * c.length | 0];
+    return SF[Math.random() * SF.length | 0];
 }
 
 function randDomain() {
