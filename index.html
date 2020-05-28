@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Get Title</title>
+    <title>随机域名标题抓取</title>
     <script src="vue.min.js"></script>
     <style>
         li {
@@ -52,7 +52,7 @@
             animation: dots 3s step-start infinite;
         }
         input {
-            width: 500px;
+            width: 200px;
             border: 1px solid #eee;
             padding: 5px;
             border-radius: 5px;
@@ -60,62 +60,6 @@
         span {
             font-size: 12px;
             margin: 0 5px;
-        }
-        .history {
-            display: inline-block;
-            width: 25px;
-            height: 25px;
-            line-height: 25px;
-            text-align: center;
-            background: #eee;
-            color: #666;
-            border-radius: 50%;
-            cursor: pointer;
-            user-select: none;
-        }
-        .history-container {
-            position: fixed;
-            height: 100%;
-            width: 100%;
-            z-index: 2;
-            left: 0;
-            top: 0;
-            overflow: hidden;
-        }
-        .history-bg {
-            width: 100%;
-            height: 100%;
-        }
-        .history-list {
-            position: absolute;
-            top: 0;
-            right: 0;
-            height: 100%;
-            overflow: auto;
-            background: #eee;
-        }
-        .history-list ul {
-            margin: 0;
-            padding: 10px;
-        }
-        .history-list li {
-            list-style: none;
-            cursor: pointer;
-            float: none;
-            margin: 3px 0;
-        }
-        .history-list li:hover {
-            color: #EE5757;
-        }
-        .slide-enter-active {
-            transition: all 0.3s ease;
-        }
-        .slide-leave-active {
-            transition: all .3s ease;
-        }
-        .slide-enter, .slide-leave-to {
-            transform: translateX(100%);
-            opacity: 0;
         }
         #app {
             padding: 5px;
@@ -125,18 +69,71 @@
             float: right;
             color: #EE5757;
         }
+        select {
+            padding: 5px;
+            border: 1px solid #eee;
+            border-radius: 3px;
+        }
+        * {
+            vertical-align: middle;
+        }
+        *:focus {
+            outline: 1px solid #3087ff;
+        }
+        .rule {
+            background: #7ebeea;
+            display: inline-block;
+            padding: 5px;
+            cursor: pointer;
+            color: #fff;
+        }
+        .rule-container {
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        .rule-bg {
+            width: 100%;
+            height: 100%;
+        }
+        .rule-content {
+            width: 316px;
+            position: absolute;
+            left: 50%;
+            margin-left: -158px;
+            top: 100px;
+            border: 1px solid #eee;
+        }
+        .rule-content > div {
+            margin-bottom: 5px;
+        }
+        .rule-bit {
+            width: 50px;
+            display: inline-block;
+            text-align: right;
+            cursor: default;
+        }
+        [v-cloak] {
+            display: none;
+        }
+        .rule-list > div {
+            padding: 5px;
+            margin: 5px;
+        }
     </style>
 </head>
 <body>
-    <div id="app">
+    <div id="app" v-cloak>
         <div>
             <span>请求超时</span><span><input type="text" v-model.number="formData.timeout" style="width:50px;"></span>
-            <span>子线程数</span><span><input type="text" v-model.number="formData.number" style="width:50px;"></span>
-            <span>域名</span><span><input type="text" v-model="formData.domain"></span>
-            <span class="history" @click="showHistory">H</span>
-            <button @click="rand" :disabled="disabled">随机域名1000条</button>
+            <span>子进程数</span><span><input type="text" v-model.number="formData.number" style="width:50px;"></span>
+            <span>包含关键字</span><span><input type="text" v-model="title" :disabled="disabled" placeholder="每个关键字用英文逗号分隔"></span>
+            <sapn>域名规则</sapn><span><div class="rule" @click="setRule">设置规则</div></span>
+            <sapn>域名后缀</sapn><span><select v-model="formData.shuffix"><option value="">不限</option><option :value="k" v-for="k in shuffix">{{k}}</option></select></span>
             <button @click="send" :disabled="disabled" :class="{active:disabled}">{{!disabled?'start':'geting'}}<span></span></button>
-            <button @click="stop" v-if="disabled">stop<span></span></button>
+            <button @click="stop" v-if="disabled" :disabled="stopDisabled">stop<span></span></button>
             <span v-if="time">cost: {{times}} | received: {{count}} | avg: {{avg}}</span>
         </div>
         <ol>
@@ -146,36 +143,158 @@
                 </div>
             </li>
         </ol>
-            <div class="history-container" v-if="m_show_history">
-                <div class="history-bg" @click="close"></div>
-                <transition name="slide" @after-leave="leave">
-                    <div class="history-list" v-if="m_show_list">
-                        <ul>
-                            <li v-for="(k,i) in historyList" :key="i"><span @click="setDomain(k)">{{i+1}}. {{k}}</span><span @click="del(k,i)" class="del">删除</span></li>
-                        </ul>
+        <div class="rule-container" v-if="ruleVisible">
+            <div class="rule-bg" @click="close"></div>
+            <div class="rule-content">
+                <div style="overflow:hidden;">
+                    <div class="rule" style="float:right;margin-top:5px;margin-right:10px;" @click="add">新增</div>
+                    <div class="rule" style="float:right;margin-top:5px;margin-right:10px;" @click="remove">移除</div>
+                </div>
+                <div class="rule-list" v-drag-move="change">
+                    <div v-for="(k,i) in rule" :key="i">
+                        <span class="rule-bit">第{{i+1}}位</span>
+                        <select v-model="k.type">
+                            <option value="1">数字字母随机</option>
+                            <option value="2">数字随机</option>
+                            <option value="3">字母随机</option>
+                        </select>
+                        <span>固定值</span><input type="text" maxlength="1" v-model="k.value" style="width:50px;">
                     </div>
-                </transition>
+                </div>
+                <div style="text-align:center">
+                    <span class="rule" @click="confirm">确定</span>
+                    <span class="rule" @click="close">关闭</span>
+                </div>
             </div>
+        </div>
     </div>
     <script>
+        Vue.directive('drag-move', {
+            bind(el, binding) {
+                let targetIndex, sourceIndex, doms, node, h, y, tp, target, cc;
+                el.style.position = 'relative';
+                el.addEventListener('mousedown', function(e) {
+                    if(['SELECT', 'INPUT', 'TEXTAREA'].indexOf(e.target.nodeName) > -1) return;
+                    doms = [].slice.call(el.children);
+                    target = null;
+                    doms.map((dom, i) => {
+                       dom.$$change = 0;
+                       if(findParent(e.target, dom)) {
+                           target = dom;
+                           sourceIndex = i;
+                           node = dom.cloneNode(true);
+                           tp = offsetTop(dom);
+                           cc = document.createElement('div');
+                           cc.style.cssText = `position:fixed;top:${tp}px;width:${dom.offsetWidth}px;z-index:9;left:${offsetLeft(dom)}px`;
+                           node.style.margin = getComputedStyle(dom).margin;
+                           cc.appendChild(node);
+                           dom.style.cssText = `visibility:hidden`;
+                           h = dom.offsetHeight;
+                           document.body.appendChild(cc);
+                       } else {
+                           dom.style.cssText = `transform:translate3d(0,0,0);transition-duration:0.3s`;
+                       }
+                    });
+                    y = e.clientY;
+                    if(!target) return;
+                    document.addEventListener('mousemove', move);
+                    document.addEventListener('mouseup', up);
+                });
+                function move(e) {
+                    e.preventDefault();
+                    let dy = e.clientY - y;
+                    let top = tp + dy;
+                    let p = dy > 0 ? -h : h;
+                    cc.style.top = top + 'px';
+                    doms.some((dom, i) => {
+                        let t = offsetTop(dom), b = dom.$$change;
+                        if(dom !== target && ((t + b < top && t + h / 2 + b > top) || (t + h / 2 + b < top + h && t + b > top))) {
+                            targetIndex = i;
+                            if(b === 0) {
+                                let m = getPadding(dom);
+                                b = p > 0 ? p + m.top : p - m.top;
+                            } else {
+                                targetIndex = b > 0 ? targetIndex + 1 : targetIndex - 1;
+                                b = 0;
+                            }
+                            dom.$$change = b;
+                            dom.style.transform = `translate3d(0,${b}px,0)`;
+                            return true;
+                        }
+                        return false;
+                    });
+                }
+                function up() {
+                    cc.remove();
+                    doms.forEach(dom => {
+                        dom.removeAttribute('style');
+                    });
+                    typeof binding.value === 'function' && binding.value(targetIndex, sourceIndex);
+                    document.removeEventListener('mousemove', move);
+                    document.removeEventListener('mouseup', up);
+                }
+                function offsetTop(dom) {
+                    if(!dom) return 0;
+                    return offsetTop(dom.offsetParent) + dom.offsetTop;
+                }
+                function offsetLeft(dom) {
+                    if(!dom) return 0;
+                    return offsetLeft(dom.offsetParent) + dom.offsetLeft;
+                }
+                function findParent(target, dom) {
+                    if(target === dom) return true;
+                    if(target === el) return false;
+                    return findParent(target.parentNode, dom);
+                }
+                function getPadding(dom) {
+                    let d = getComputedStyle(dom);
+                    return {
+                        top: parseInt(d.paddingTop),
+                        bottom: parseInt(d.paddingBottom)
+                    }
+                }
+            }
+        });
         let app = new Vue({
             el: '#app',
             data: {
                 disabled: false,
                 list: [],
+                rule: [
+                    {type: "1", value: ''},
+                    {type: "1", value: ''},
+                ],
                 time: 0,
                 tid: 0,
-                historyList: [],
-                m_show_history: 0,
-                m_show_list: 0,
+                ruleVisible: false,
+                stopDisabled: false,
+                shuffix: ['cc', 'net', 'com', 'vip', 'wang', 'com.cn', 'cn', 'tv', 'org', 'top', 'xyz'],
+                domainType: [
+                    {name: '全数字', value: 1},
+                    {name: '全字母', value: 2},
+                    {name: '数字在前字母在后', value: 3},
+                    {name: '字母在前数字在后', value: 4},
+                    {name: '数字在中间', value: 5},
+                    {name: '字母在中间', value: 6},
+                ],
+                domainLength: [2, 3, 4, 5, 6, 7, 8],
+                title: '',
+                titles: [],
                 count: 0,
                 formData: {
-                    domain: 'www.xxx[0-999].com',
+                    shuffix: '',
+                    rule: '',
                     number: 20,
                     timeout: 3000
                 }
             },
+            created() {
+                this.formData.rule = JSON.parse(JSON.stringify(this.rule));
+            },
             watch: {
+                'title'(v) {
+                  this.title = v.trim();
+                },
                 'formData.number'(v) {
                     if(typeof v === 'string') {
                         v = Number(v.replace(/[^\d]/g, ''));
@@ -205,102 +324,96 @@
                     return formatTime(this.time);
                 }
             },
-            created() {
-                this.getHistory();
-            },
             methods: {
-                del(k, i) {
-                    this.historyList.splice(i, 1);
-                    delHistory(k);
+                change(index, sindex) {
+                    let tmp = this.rule[sindex], i;
+                    if(sindex < index) {
+                        for(i = sindex; i < index; i++) {
+                            this.rule[i] = this.rule[i + 1];
+                        }
+                    } else {
+                        for(i = sindex; i > index; i--) {
+                            this.rule[i] = this.rule[i - 1];
+                        }
+                    }
+                    this.rule[i] = tmp;
+                    this.$forceUpdate();
                 },
-                setDomain(k) {
-                    this.formData.domain = k;
+                confirm() {
+                    this.formData.rule = JSON.parse(JSON.stringify(this.rule));
                     this.close();
                 },
+                setRule() {
+                    this.rule = JSON.parse(JSON.stringify(this.formData.rule));
+                    this.ruleVisible = true;
+                },
                 close() {
-                    this.m_show_list = 0;
+                    this.ruleVisible = false;
                 },
-                leave() {
-                    this.m_show_history = 0;
+                remove() {
+                  if(this.rule.length > 2) {
+                      this.rule.pop();
+                  }
                 },
-                getHistory() {
-                    let m = localStorage.getItem('history');
-                    if(m) {
-                        m = JSON.parse(m);
-                        m.sort((a, b) => {
-                            return a.localeCompare(b);
-                        });
-                        this.historyList = m;
-                    }
+                addList(o) {
+                    if(this.list.some(a => a.host === o.host)) return;
+                    this.list.push(o);
                 },
-                showHistory() {
-                    this.getHistory();
-                    this.m_show_history = 1;
-                    this.$nextTick(() => {
-                        this.m_show_list = 1;
-                    })
+                add() {
+                    this.rule.push({type: "1", value: ''})
+                },
+                filter(title) {
+                    if(this.titles.length === 0) return true;
+                    return this.titles.some(d => {
+                       return title.indexOf(d) > -1;
+                    });
                 },
                 setVisited(k) {
                     this.$set(k, 'visited', true);
                 },
                 stop() {
                     clearInterval(this.tid);
+                    this.stopDisabled = true;
                     send({stop: 1});
                 },
-                rand() {
-                    this.list = [];
-                    this.disabled = true;
-                    this.time = 0;
-                    this.count = 0;
-                    clearInterval(this.tid);
-                    this.tid = setInterval(() => {
-                        this.time++;
-                    }, 1000);
-                    send({rand: 1, timeout: this.formData.timeout, number: this.formData.number});
-                },
                 send() {
-                    if(this.historyList.indexOf(this.formData.domain) > -1) {
-                        if(!confirm('历史记录中有记录，确定要重新查找？')) {
-                            return;
-                        }
-                    }
                     this.list = [];
                     this.disabled = true;
+                    this.stopDisabled = false;
                     this.time = 0;
                     this.count = 0;
+                    if(this.title.length > 0) {
+                        this.titles = this.title.split(',');
+                    }
                     clearInterval(this.tid);
                     this.tid = setInterval(() => {
                         this.time++;
                     }, 1000);
                     send(this.formData);
-                    saveHistory(this.formData.domain);
                 }
             }
         });
         let ws;
 
-        function delHistory(url) {
-            let m = localStorage.getItem('history');
-            if(m) {
-                m = JSON.parse(m);
-                let n = m.indexOf(url);
-                if(n > -1) {
-                    m.splice(n, 1);
-                    localStorage.setItem('history', JSON.stringify(m));
-                }
+        function throttle(fn, wait, immediate) {
+            let prev, last = 0, tid, pending = true, context = this;
+            function exec(args) {
+                fn.apply(context, args);
+                last = prev;
+                pending = true;
             }
-        }
-
-        function saveHistory(url) {
-            let m = localStorage.getItem('history');
-            if(m) {
-                m = JSON.parse(m);
-                if(m.indexOf(url) === -1) {
-                    m.push(url);
-                    localStorage.setItem('history', JSON.stringify(m));
+            return function() {
+                prev = Date.now();
+                let args = arguments;
+                if(prev - last > wait && immediate) {
+                    clearTimeout(tid);
+                    exec(args);
+                } else {
+                    if(pending) {
+                        pending = false;
+                        tid = setTimeout(exec, wait, args);
+                    }
                 }
-            } else {
-                localStorage.setItem('history', JSON.stringify([url]));
             }
         }
 
@@ -312,11 +425,12 @@
             };
             ws.onmessage = function(data) {
                 let ob = JSON.parse(data.data);
-                app.count++;
-                ob.isHad && ob.title && app.list.push(ob);
                 if(ob.end) {
                     app.disabled = false;
                     clearInterval(app.tid);
+                } else {
+                    ob.isHad && ob.title && app.filter(ob.title) && app.addList(ob);
+                    app.count++;
                 }
             };
             ws.onclose = function() {

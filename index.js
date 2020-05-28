@@ -2,30 +2,29 @@ const ws = require('nodejs-websocket');
 const http = require('http');
 const https = require('https');
 const {fork} = require('child_process');
-let domain = [];
 let count = 0;
-let total = 0;
 let M = 10;
+let stop = true;
+let domain = '';
+let isInfinite = true;
 let timeout = 3000;
+let domainList = [];
+const SF = ['cc', 'net', 'com', 'vip', 'wang', 'com.cn', 'cn', 'tv', 'org', 'top', 'xyz'];
+const CHAR = 'abcdefghijklmnopqrstuvwxyz';
+const CHARNUM = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
 const server = ws.createServer(connection => {
     connection.on('text', function(result) {
         let data = JSON.parse(result);
+        stop = false;
         if(data.stop) {
-            connection.hadErr = 1;
-            return connection.sendText(JSON.stringify({end: 1}));
+            stop = true;
+            return;
         }
         connection.hadErr = 0;
-        count = 0;
-        total = 0;
-        domain = [];
         timeout = data.timeout;
         M = data.number;
-        if(data.rand) {
-            domain = randDomain();
-        } else {
-            domain = parseDomain(data.domain);
-        }
+        domain = genDomain(data.rule, data.shuffix);
         trigger(connection);
     });
     connection.on('connect', function(code) {
@@ -37,60 +36,128 @@ const server = ws.createServer(connection => {
     });
 }).listen(3001);
 
-function randRange(m, n) {
-    return m + Math.random() * (n - m + 1) | 0;
+function genDomain(rule, shuffix) {
+    let c = [], g = [];
+    if(!shuffix) c.push(SF.length);
+    shuffix = shuffix ? shuffix : '%h';
+    g.push('www.');
+    rule.forEach(d => {
+       if(d.value) return g.push(d.value);
+       if(d.type === '1') {
+           c.push(36);
+           g.push('%r');
+       } else if(d.type === "2") {
+           c.push(10);
+           g.push('%d');
+       } else {
+           c.push(26);
+           g.push('%s');
+       }
+    });
+    g.push('.');
+    g.push(shuffix);
+   if(c.reduce((p, n) => p * n) > 100000) {
+       isInfinite = true;
+       domain = g.join('');
+   } else {
+       isInfinite = false;
+       genDomainList(g);
+   }
 }
 
-function getRandChar() {
-    let a = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    return a[Math.random() * a.length | 0];
+function genDomainList(g) {
+    let code = [], s = [];
+    for(let i = 0; i < g.length; i++) {
+        if(g[i] === '%r') {
+            code.push(CHARNUM.split(''));
+            s.push({index: 0, s: i, len: CHARNUM.length});
+        } else if(g[i] === '%s') {
+            code.push(CHAR.split(''));
+            s.push({index: 0, s: i, len: CHAR.length});
+        } else if(g[i] === '%d') {
+            code.push([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+            s.push({index: 0, s: i, len: 10});
+        } else if(g[i] === '%h') {
+            code.push(SF);
+            s.push({index: 0, s: i, len: SF.length});
+        } else {
+            code.push(g[i]);
+        }
+    }
+    let str = '';
+    function find(i) {
+        for(let it of s) {
+            if(it.s === i) {
+                return it;
+            }
+        }
+    }
+    domainList = [];
+    while(1) {
+        str = '';
+        for(let i = 0; i < code.length; i++) {
+            if(code[i] instanceof Array) {
+                str += code[i][find(i).index];
+            } else {
+                str += code[i];
+            }
+        }
+        domainList.push(str);
+        let b = 0;
+        for(let j = s.length - 1; j >= 0; j--) {
+            if(j === s.length - 1) {
+                b = 1;
+            }
+            if(b) {
+                b = 0;
+                s[j].index++;
+                if(s[j].index === s[j].len && s[0].index < s[0].len) {
+                    s[j].index = 0;
+                    b = 1;
+                }
+            }
+        }
+        if(s[0].index === s[0].len) {
+            break;
+        }
+    }
 }
 
-function getRandDomainShuffix() {
-    let c = ['cc', 'net', 'com', 'vip', 'wang'];
-    return c[Math.random() * c.length | 0];
+function randCharNumber() {
+    return CHARNUM[Math.random() * a.length | 0];
+}
+
+function randChar() {
+    return CHAR[Math.random() * a.length | 0];
+}
+
+function randShuffix() {
+    return SF[Math.random() * c.length | 0];
 }
 
 function randDomain() {
-    let n = 1000, m, s, arr = [];
-    while(n--) {
-        m = randRange(2, 8);
-        s = '';
-        while(m--) {
-            s += getRandChar();
-        }
-        arr.push(`www.${s}.${getRandDomainShuffix()}`);
+    if(isInfinite) {
+        return domain.replace(/%r|%d|%s|%h/g, a => {
+            if(a === '%r') {
+                return randCharNumber();
+            } else if(a === '%d') {
+                return Math.random() * 10 | 0;
+            } else if(a === '%s') {
+                return randChar();
+            } else if(a === '%h') {
+                return randShuffix();
+            }
+        });
+    } else {
+        return domainList.pop();
     }
-    return arr;
 }
 
 function trigger(connection) {
-    if(connection.hadErr) return;
-        let len = domain.length;
-        count = 0;
-        total = len >= M ? M : len;
-        let dos = domain.splice(0, total);
-        for(let i = 0; i < total; i++) {
-            createChildProess(dos[i], connection);
-        }
-}
-
-function parseDomain(domain) {
-    let reg = /\[\d+\-\d+\]/;
-    let m = domain.match(reg);
-    if(m) {
-        m = m[0].match(/(\d+)/g);
-        if(m.length !== 2) return [domain];
-        let start = Number(m[0]);
-        let end = Number(m[1]);
-        let arr = [];
-        while(start <= end) {
-            arr.push(domain.replace(reg, start));
-            start++;
-        }
-        return arr;
+    count = M;
+    for(let i = 0; i < M; i++) {
+        createChildProess(connection);
     }
-    return [domain];
 }
 
 function decode(t) {
@@ -99,22 +166,11 @@ function decode(t) {
     })
 }
 
-async function createChildProess(param, connection) {
-    let ob = {host: 'http://' + param};
-    let options = {
-        method: 'get',
-        host: param,
-        headers: {
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36',
-            'accept': 'text/html'
-        }
-    };
-    let child = fork('./request.js');
+async function createChildProess(connection) {
+    let child = fork('./request.js', {windowsHide: true});
+    let host;
     child.on('message', res => {
-        child.kill();
-        count++;
-        ob.end = domain.length === 0 && count === total;
-        let title;
+        let title, ob = {};
         if(res && typeof res.data === 'string') {
             title = res.data.match(/<title>(.*)<\/title>/i);
             if(title) {
@@ -128,10 +184,32 @@ async function createChildProess(param, connection) {
         if(res.message) {
             ob.err = res.message;
         }
-        !connection.hadErr && connection.sendText(JSON.stringify(ob));
-        if(count === total && domain.length) {
-            trigger(connection);
+        ob.host = `http://${res.host}`;
+        if(!connection.hadErr) {
+            connection.sendText(JSON.stringify(ob));
+            if(stop) {
+                kill();
+            } else {
+                host = randDomain();
+                if(host) {
+                    child.send({host: host});
+                } else {
+                    kill();
+                }
+            }
         }
     });
-    child.send({options: options, timeout: timeout});
+    function kill() {
+        child.kill();
+        count--;
+        if(count === 0) {
+            connection.sendText(JSON.stringify({end: 1}));
+        }
+    }
+    host = randDomain();
+    if(host) {
+        child.send({host: host, timeout: timeout});
+    } else {
+        kill();
+    }
 }

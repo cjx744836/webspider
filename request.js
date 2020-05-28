@@ -3,6 +3,14 @@ const https = require('https');
 const iconv = require('iconv-lite');
 let reqTIMEOUT = 3000;
 const resTIMEOUT = 5000;
+let options = {
+    method: 'get',
+    headers: {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36',
+        'accept': 'text/html'
+    }
+};
+let init = false;
 
 function isHttps(host) {
     return /https/.test(host);
@@ -73,10 +81,14 @@ function get(options) {
 }
 
 process.on('message', (arg) => {
-    reqTIMEOUT = arg.timeout;
-    get(arg.options).then(res => {
-        process.send(res);
+    if(!init) {
+        reqTIMEOUT = arg.timeout;
+        init = true;
+    }
+    options.host = arg.host;
+    get(options).then(res => {
+        process.send({data: res.data, host: options.host});
     }).catch(err => {
-       process.send({message: err.message});
+        process.send({message: err.message, host: options.host});
     });
 });
