@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
+    "char-encoding-detector": "^0.0.9",
     "iconv-lite": "^0.5.1",
     "nodejs-websocket": "^1.7.2"
   },

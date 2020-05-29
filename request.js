@@ -1,6 +1,7 @@
 const http = require('http');
 const https = require('https');
 const iconv = require('iconv-lite');
+const {detectEncoding} = require('char-encoding-detector');
 let reqTIMEOUT = 3000;
 const resTIMEOUT = 5000;
 let options = {
@@ -74,24 +75,13 @@ function get(options) {
     });
 }
 
-function isNeedDecode(data) {
-    let m = data.match(/gb2312|gbk|big5|utf-8/i);
-    if(m) return m;
-    return 0;
-}
-
 process.on('message', (arg) => {
     if(arg.timeout) {
         reqTIMEOUT = arg.timeout;
     }
     options.host = arg.host;
     get(options).then(res => {
-        let m = isNeedDecode(res.data.toString());
-        if(m) {
-            process.send({data: iconv.decode(res.data, m), host: options.host});
-        } else {
-            process.send({data: res.data, host: options.host});
-        }
+        process.send({data: iconv.decode(res.data, detectEncoding(res.data) || 'gb2312'), host: options.host});
     }).catch(err => {
         process.send({message: err.message, host: options.host});
     });
