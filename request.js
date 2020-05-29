@@ -10,7 +10,6 @@ let options = {
         'accept': 'text/html'
     }
 };
-let init = false;
 
 function isHttps(host) {
     return /https/.test(host);
@@ -24,8 +23,6 @@ function get(options) {
             clearTimeout(tid);
             let resId = 0;
             let code = res.statusCode;
-            //res.setEncoding('utf8');
-            let rawData = '';
             if(code >= 300 && code < 400) {
                 if(res.headers.location) {
                     options.cprotocol = isHttps(res.headers.location) ? 'https' : 'http';
@@ -47,16 +44,13 @@ function get(options) {
                     return reject(new Error(`Redirect Failed`));
                 }
             } else {
+                let rawData = Buffer.alloc(0);
                 resId = setTimeout(() => {
                     res.destroy();
                     reject(new Error('Response Timeout'));
                 }, resTIMEOUT);
-                let m;
                 res.on('data', chunk => {
-                    if(m = (chunk + '').match(/charset=(gb2312|gbk|big5)/i)) {
-                        chunk = iconv.decode(chunk, m[1]);
-                    }
-                    rawData += chunk;
+                    rawData = Buffer.concat([rawData, chunk], rawData.length + chunk.length);
                 });
                 res.on('end', () => {
                     clearTimeout(resId);
@@ -80,14 +74,24 @@ function get(options) {
     });
 }
 
+function isNeedDecode(data) {
+    let m = data.match(/gb2312|gbk|big5|utf-8/i);
+    if(m) return m;
+    return 0;
+}
+
 process.on('message', (arg) => {
-    if(!init) {
+    if(arg.timeout) {
         reqTIMEOUT = arg.timeout;
-        init = true;
     }
     options.host = arg.host;
     get(options).then(res => {
-        process.send({data: res.data, host: options.host});
+        let m = isNeedDecode(res.data.toString());
+        if(m) {
+            process.send({data: iconv.decode(res.data, m), host: options.host});
+        } else {
+            process.send({data: res.data, host: options.host});
+        }
     }).catch(err => {
         process.send({message: err.message, host: options.host});
     });

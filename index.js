@@ -56,7 +56,10 @@ function genDomain(rule, shuffix) {
     });
     g.push('.');
     g.push(shuffix);
-   if(c.reduce((p, n) => p * n) > 100000) {
+   if(c.length === 0) {
+       isInfinite = false;
+       domainList.push(g.join(''));
+   } else if(c.reduce((p, n) => p * n) > 100000) {
        isInfinite = true;
        domain = g.join('');
    } else {
@@ -161,7 +164,10 @@ function trigger(connection) {
 }
 
 function decode(t) {
-    return t.replace(/&#(\d+);/g, function(a, b) {
+    return t.replace(/&#([^;]*);/g, function(a, b) {
+        if(/^x/.test(b)) {
+            return String.fromCharCode(0 + b);
+        }
         return String.fromCharCode(b);
     })
 }
@@ -174,7 +180,7 @@ async function createChildProess(connection) {
         if(res && typeof res.data === 'string') {
             title = res.data.match(/<title>(.*)<\/title>/i);
             if(title) {
-                if(/&#\d+;/.test(title[1])) {
+                if(/&#[^;]*;/.test(title[1])) {
                     title[1] = decode(title[1]);
                 }
                 ob.title = title[1];
@@ -187,31 +193,25 @@ async function createChildProess(connection) {
         ob.host = `http://${res.host}`;
         if(!connection.hadErr) {
             connection.sendText(JSON.stringify(ob));
-            if(stop) {
-                kill();
-            } else {
-                host = randDomain();
-                if(host) {
-                    child.send({host: host});
-                } else {
-                    kill();
-                }
-            }
-        } else {
-            kill();
         }
+        send();
     });
     function kill() {
         child.kill();
         count--;
         if(count === 0) {
-            connection.sendText(JSON.stringify({end: 1}));
+            !connection.hadErr && connection.sendText(JSON.stringify({end: 1}));
         }
     }
-    host = randDomain();
-    if(host) {
-        child.send({host: host, timeout: timeout});
-    } else {
-        kill();
+    function send() {
+        host = randDomain();
+        if(stop || connection.hadErr) {
+            kill();
+        } else if(host) {
+            child.send({host: host, timeout: timeout});
+        } else {
+            kill();
+        }
     }
+    send();
 }
