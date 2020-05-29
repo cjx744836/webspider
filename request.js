@@ -33,7 +33,9 @@ function get(options) {
                     }
                     if(res.headers.location.indexOf('http') > -1) {
                         try {
-                            options.host = new URL(res.headers.location).host;
+                            let url = new URL(res.headers.location);
+                            options.host = url.host;
+                            options.path = url.pathname;
                         } catch(e) {
                             return reject(e);
                         }
