@@ -47,22 +47,24 @@ function get(options) {
                     return reject(new Error(`Redirect Failed`));
                 }
             } else {
-                let rawData = Buffer.alloc(0);
-                resId = setTimeout(() => {
-                    res.destroy();
-                    reject(new Error('Response Timeout'));
-                }, resTIMEOUT);
-                res.on('data', chunk => {
-                    rawData = Buffer.concat([rawData, chunk], rawData.length + chunk.length);
-                });
-                res.on('end', () => {
-                    clearTimeout(resId);
-                    resolve({data: rawData});
-                });
-                res.on('error', e => {
-                    if(res.destroyed) return;
-                    reject(e);
-                });
+                if(code === 200) {
+                    let rawData = Buffer.alloc(0);
+                    resId = setTimeout(() => {
+                        res.destroy();
+                        reject(new Error('Response Timeout'));
+                    }, resTIMEOUT);
+                    res.on('data', chunk => {
+                        rawData = Buffer.concat([rawData, chunk], rawData.length + chunk.length);
+                    });
+                    res.on('end', () => {
+                        clearTimeout(resId);
+                        resolve({data: rawData});
+                    });
+                    res.on('error', e => {
+                        if(res.destroyed) return;
+                        reject(e);
+                    });
+                }
             }
         });
         tid = setTimeout(() => {
