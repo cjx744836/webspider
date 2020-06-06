@@ -64,6 +64,8 @@ function get(options) {
                         if(res.destroyed) return;
                         reject(e);
                     });
+                } else {
+                    reject(new Error(`${code}`))
                 }
             }
         });
